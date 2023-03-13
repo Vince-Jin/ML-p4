@@ -1,0 +1,266 @@
+---
+title: "ML-p4"
+author: "Vincent Jin"
+date: "2023-03-08"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Homework 04
+## Vincent Jin
+## Person I worked with: Jing Wang
+
+## Support Vector Machines ISL: 9.7. Problems 7, 8 ((a)-(e) only)
+## Tree-based Methods ISL: 8.4. Problem 10
+
+``` {r}
+library(tidyverse)
+```
+
+## Chapter 9 Problem 7
+In this problem, you will use support vector approaches in order to predict whether a given car gets high or low gas mileage based on the Auto data set.
+
+### (a) Create a binary variable that takes on a 1 for cars with gas mileage above the median, and a 0 for cars with gas mileage below the median.
+
+``` {r C9Q7a}
+library(ISLR)
+
+auto <- Auto
+
+mpg_median <- median(auto$mpg)
+
+auto <- auto %>%
+  mutate(mpg_bi = as.factor(ifelse(mpg > mpg_median, 1, 0)))
+```
+
+### (b) Fit a support vector classifier to the data with various values of cost, in order to predict whether a car gets high or low gas mileage. Report the cross-validation errors associated with different values of this parameter. Comment on your results.
+
+``` {r C9Q7b}
+library(e1071)
+set.seed(1)
+tune.out <- tune(svm, mpg_bi ~ ., data = auto,kernel = "linear", ranges = list(cost = c(0.001, 0.01, 0.1, 1,5,10,100)))
+summary(tune.out)
+```
+
+***Answer***
+
+Since cost = 1.0 the error is the lowest (0.0715), cost = 1 fits the best for linear kernel.
+
+
+### (c) Now repeat (b), this time using SVMs with radial and polynomial basis kernels, with different values of gamma and degree and cost. Comment on your results.
+
+``` {r C9Q7c}
+set.seed(1)
+tune.out1 <- tune(svm, mpg_bi ~ ., data = auto, kernel = "polynomial", ranges = list(cost = c(0.01, 0.1, 1, 5, 10, 100), degree = c(2, 3, 4)))
+tune.out2 <- tune(svm, mpg_bi ~ ., data = auto, kernel = "radial", ranges = list(cost = c(0.01, 0.1, 1, 5, 10, 100), gamma = c(0.01, 0.1, 1, 5, 10, 100)))
+summary(tune.out1)
+summary(tune.out2)
+```
+
+***Answer***
+
+Using SVMs with polynomial basis kernel, cost = 100 with degree of 2 fits the best as suggested by lowest error. For radial, it was also cost = 100 with gamma = 0.01.
+
+
+### (d) Make some plots to back up your assertions in (b) and (c).
+
+``` {r C9Q7d}
+svmlinear <- svm(mpg_bi ~ ., data = auto, kernel = "linear", cost = 1)
+svmpoly <- svm(mpg_bi ~ ., data = auto, kernel = "polynomial", cost = 100, degree = 2)
+svmradial <- svm(mpg_bi ~ ., data = auto, kernel = "radial", cost = 100, gamma = 0.01)
+plotpairs <- function(fit) {
+    for (name in names(auto)[!(names(auto) %in% c("mpg", "mpg_bi", "name"))]) {
+      temp = as.formula(paste("mpg~", name, sep = ""))
+      print(temp)
+      plot(fit, auto, temp)
+    }
+}
+print(plotpairs(svmlinear))
+```
+
+
+``` {r}
+print(plotpairs(svmpoly))
+```
+
+``` {r}
+print(plotpairs(svmradial))
+```
+
+## Chapter 9 Problem 8
+
+This problem involves the “OJ” data set which is part of the ISLR package.
+
+### (a) Create a training set containing a random sample of 800 observations, and a test set containing the remaining observations.
+
+``` {r C9Q8a}
+set.seed(1)
+train_helper <- sample(nrow(OJ), 800)
+train <- OJ[train_helper, ]
+test <- OJ[-train_helper, ]
+```
+
+### (b) Fit a support vector classifier to the training data using “cost” = 0.01, with “Purchase” as the response and the other variables as predictors. Use the summary() function to produce summary statistics, and describe the results obtained.
+
+``` {r C9Q8b}
+svmlinear <- svm(Purchase ~ ., data = train, kernel = "linear", cost = 0.01)
+summary(svmlinear)
+```
+
+***Answer***
+
+435 support vectors were created, 216 belong to MM level and 219 belong to CH.
+
+### (c) What are the training and test error rates?
+
+``` {r C9Q8c}
+pred <- predict(svmlinear, train)
+table(train$Purchase, pred)
+pred1 <- predict(svmlinear, test)
+table(test$Purchase, pred1)
+
+print(round((65 + 75) / (420 + 65 + 75 + 240) * 100, 2))
+print(round(((33 + 15) / (153 + 15 + 33 + 69) * 100), 2))
+```
+
+***Answer***
+
+The train error rate is 17.5%.
+The test error rate is 17.78%.
+
+### (d) Use the tune() function to select an optimal cost. Consider values in the range 0.01 to 10.
+
+``` {r C9Q8d}
+set.seed(1)
+tune.out3 <- tune(svm, Purchase ~ ., data = train, lernel = "linear", ranges = list(cost = 10^seq(-2, 1, by = 0.25)))
+summary(tune.out3)
+```
+
+***Answer***
+
+The error rate suggested that the optimal cost is 0.56.
+
+### (e) Compute the training and test error rates using this new value for cost.
+
+``` {r C9Q8e}
+svm.linear <- svm(Purchase ~ ., kernel = "linear", data = train, cost = tune.out3$best.parameters$cost)
+pred2 <- predict(svm.linear, train)
+table(train$Purchase, pred2)
+
+pred3 <- predict(svm.linear, test)
+table(test$Purchase, pred3)
+
+print(round(((61 + 71) / (424 + 61 + 71 +244) * 100), 2))
+print(round(((13 + 29) / (155 + 13 + 29 + 73) * 100), 2))
+```
+
+***Answer***
+
+Using the new value of cost, the training error rate was 16.5% and test error rate was 15.56%
+
+
+## Chapter 8 Problem 10
+
+We now use boosting to predict Salary in the Hitters data set.
+
+### (a) Remove the observations for whom the salary information is unknown, and then log-transform the salaries.
+
+``` {r C8Q10a}
+hitters <- Hitters %>%
+  filter(!is.na(Salary)) %>%
+  mutate(Salary = log(Salary))
+```
+
+### (b) Create a training set consisting of the first 200 observations, and a test set consisting of the remaining observations.
+
+``` {r C8Q10b}
+train_helper <- 1:200
+train <- hitters[train_helper,]
+test <- hitters[-train_helper,]
+```
+
+### (c) Perform boosting on the training set with 1,000 trees for a range of values of the shrinkage parameter lambda. Produce a plot with different shrinkage values on the x-axis and the corresponding training set MSE on the y-axis.
+
+``` {r C8Q10c}
+library(gbm)
+
+set.seed(1)
+
+lambda_helper <- seq(-10, -0.2, by = 0.1)
+lambda <- 10 ^ lambda_helper
+error_train <- rep(NA, length(lambda))
+for (i in 1:length(lambda)) {
+    boost <- gbm(Salary ~ ., data = train, distribution = "gaussian", n.trees = 1000, shrinkage = lambda[i])
+    pred <- predict(boost, train, n.trees = 1000)
+    error_train[i] <- mean((pred - train$Salary)^2)
+}
+
+plot(lambda, error_train, type = "b", xlab = "Shrinkage value", ylab = "Training MSE", 
+    col = "blue")
+```
+
+### (d) Produce a plot with different shrinkage values on the x-axis and the corresponding test set MSE on the y-axis.
+
+``` {r C8Q10d}
+set.seed(1)
+error_test <- rep(NA, length(lambda))
+for (i in 1:length(lambda)) {
+    boost <- gbm(Salary ~ ., data = train, distribution = "gaussian", n.trees = 1000, shrinkage = lambda[i])
+    pred <- predict(boost, test, n.trees = 1000)
+    error_test[i] <- mean((pred - test$Salary)^2)
+}
+plot(lambda, error_test, type = "b", xlab = "Shrinkage value", ylab = "Test MSE",col = "blue")
+
+```
+
+### (e) Compare the test MSE of boosting to the test MSE that results from applying two of the regression approaches seen in Chapters 3 and 6.
+
+``` {r C8Q10e}
+library(glmnet)
+
+lm.fit <- lm(Salary ~ .,data = train)
+pred4 <- predict(lm.fit, test)
+round(mean((pred4 - test$Salary) ^ 2) * 100, 2)
+
+train_model<- model.matrix(Salary ~ ., data = train)
+test_model <- model.matrix(Salary ~ ., data = test)
+salary <- train$Salary
+glmnet.fit <- glmnet(train_model, salary, alpha = 0)
+pred5 <- predict(glmnet.fit, s = 0.01, newx = test_model)
+round(mean((pred5 - test$Salary) ^ 2) * 100 , 2)
+```
+
+***Answer***
+
+The test error for boosting was lower.
+
+### (f) Which variables appear to be the most important predictors in the boosted model?
+
+``` {r C8Q10f}
+boost <- gbm(Salary ~., data = train, distribution = "gaussian", n.trees = 1000, shrinkage = lambda[which.min(error_test)])
+summary(boost)
+```
+
+***Answer***
+
+Variable of CAtBat seems to be the most important predictor.
+
+### (g) Now apply bagging to the training set. What is the test set MSE for this approach?
+
+``` {r C8Q10g}
+library(randomForest)
+
+set.seed(1)
+bagging <- randomForest(Salary ~ ., data = train, mtry = 19, ntree = 500)
+pred6 <- predict(bagging, newdata = test)
+round(mean((pred6 - test$Salary) ^ 2) * 100, 2)
+```
+
+***Answer***
+
+The test MSE for bagging approach is 22.99%.
